@@ -1,8 +1,48 @@
-export function add(a: number, b: number): number {
-  return a + b;
-}
+type PromiseQueueContstuctorArgs<T = unknown> = {
+  maxSimultaneous: number;
+  onResolve?: (val: T) => void;
+};
 
-// Learn more at https://docs.deno.com/runtime/manual/examples/module_metadata#concepts
-if (import.meta.main) {
-  console.log("Add 2 + 3 =", add(2, 3));
+export class PromiseQueue<T> {
+  active: Promise<T>[];
+  queue: Promise<T>[];
+  onResolve?: (val: T) => void;
+  maxSimultaneous: number;
+
+  constructor({ maxSimultaneous, onResolve }: PromiseQueueContstuctorArgs) {
+    this.active = [];
+    this.queue = [];
+    this.maxSimultaneous = maxSimultaneous;
+    this.onResolve = onResolve;
+  }
+
+  add(p: Promise<T>): void {
+    if (this.active.length >= this.maxSimultaneous) {
+      this.queue.push(p);
+    } else {
+      this.active.push(p);
+      this.run(p);
+    }
+  }
+
+  private run(p: Promise<T>): void {
+    p.then((val) => {
+      this.onResolve?.(val);
+    }).finally(() => {
+      this.next(p);
+    });
+  }
+
+  private next(p: Promise<T>): void {
+    this.active = this.active.filter((activePromise) => activePromise !== p);
+
+    if (this.queue.length > 0) {
+      const nextP = this.queue.shift();
+
+      if (typeof nextP !== "undefined") {
+        this.active.push(nextP);
+        this.run(nextP);
+      }
+    }
+  }
 }
